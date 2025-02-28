@@ -100,7 +100,7 @@ export default function Home() {
             <h3 className="text-xs font-semibold text-muted-foreground mb-2">PINNED</h3>
             <div className="space-y-1">
               <div className="p-2 text-sm rounded-md hover:bg-muted">How can I improve my time management skills?</div>
-              <div className="p-2 text-sm rounded-md hover:bg-muted">What's the best way to learn a new language?</div>
+              <div className="p-2 text-sm rounded-md hover:bg-muted">What&apos;s the best way to learn a new language?</div>
               <div className="p-2 text-sm rounded-md hover:bg-muted">How do I start investing in stocks?</div>
               <div className="p-2 text-sm rounded-md hover:bg-muted">What are the benefits of daily exercise?</div>
             </div>
@@ -111,7 +111,7 @@ export default function Home() {
             <h3 className="text-xs font-semibold text-muted-foreground mb-2">CHAT HISTORY</h3>
             <div className="space-y-1">
               <div className="p-2 text-sm rounded-md hover:bg-muted">
-                What's the difference between a virus and bacteria?
+                What&apos;s the difference between a virus and bacteria?
               </div>
               <div className="p-2 text-sm rounded-md hover:bg-muted">How can I reduce stress at work?</div>
               <div className="p-2 text-sm rounded-md hover:bg-muted">What are some good healthy snacks?</div>
