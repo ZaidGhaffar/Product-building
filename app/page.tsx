@@ -266,21 +266,10 @@ export default function Home() {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            {/* <Button variant="secondary" size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700">
+            <Button variant="secondary" size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700">
               <Plus className="h-3 w-3 mr-1" />
               New chat
-            </Button> */}
-            <Button
-                  onClick={isRecording ? stopAudioStream : startAudioStream}
-                  className={`px-4 py-2 rounded-lg ${
-                    isRecording 
-                      ? 'bg-red-500 hover:bg-red-600' 
-                      : 'bg-indigo-600 hover:bg-indigo-700'
-                  } text-white font-semibold flex items-center gap-2`}
-                >
-                  <Mic className="h-4 w-4" />
-                  {isRecording ? 'Stop Recording' : 'Start Recording'}
-                </Button>
+            </Button>
             <Button variant="ghost" size="icon">
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
@@ -302,7 +291,20 @@ export default function Home() {
                 <source src="/video.mp4" type="video/mp4" />
                 Your browser does not support the video tag.
               </video>
-              
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
+                <Button
+                  onClick={isRecording ? stopAudioStream : startAudioStream}
+                  className={`px-4 py-2 rounded-lg ${
+                    isRecording 
+                      ? 'bg-red-500 hover:bg-red-600' 
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  } text-white font-semibold flex items-center gap-2`}
+                >
+                  <Mic className="h-4 w-4" />
+                  {isRecording ? 'Stop Recording' : 'Start Recording'}
+                </Button>
+                <div className="text-sm text-white mt-2">{status}</div>
+              </div>
             </div>
           </div>
         </div>
