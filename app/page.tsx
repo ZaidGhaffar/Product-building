@@ -1,3 +1,6 @@
+'use client';
+
+import { useState, useRef, useEffect } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,9 +19,131 @@ import {
   Underline,
   Code,
   List,
+  Mic,
 } from "lucide-react"
 
 export default function Home() {
+  const [isRecording, setIsRecording] = useState(false);
+  const [status, setStatus] = useState('');
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const websocketRef = useRef<WebSocket | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+
+  const startAudioStream = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          sampleSize: 16,
+          echoCancellation: true,
+          noiseSuppression: true,
+        }
+      });
+      
+      mediaStreamRef.current = stream;
+      setIsRecording(true);
+      setStatus('Microphone connected');
+
+      websocketRef.current = new WebSocket('ws://localhost:8000/ws');
+      
+      websocketRef.current.onopen = () => {
+        setStatus('WebSocket connected');
+        
+        const audioContext = new AudioContext({
+          sampleRate: 16000,
+        });
+        audioContextRef.current = audioContext;
+        
+        const source = audioContext.createMediaStreamSource(stream);
+        const processor = audioContext.createScriptProcessor(1024, 1, 1);
+        processorRef.current = processor;
+
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+
+        processor.onaudioprocess = (e) => {
+          if (websocketRef.current?.readyState === WebSocket.OPEN) {
+            const inputData = e.inputBuffer.getChannelData(0);
+            const pcmData = new Int16Array(inputData.length);
+            
+            for (let i = 0; i < inputData.length; i++) {
+              const s = Math.max(-1, Math.min(1, inputData[i]));
+              pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            
+            try {
+              websocketRef.current.send(pcmData.buffer);
+            } catch (error) {
+              console.error('Error sending audio data:', error);
+            }
+          }
+        };
+      };
+
+      websocketRef.current.onmessage = (event) => {
+        console.log('Received message from server:', event.data);
+      };
+
+      websocketRef.current.onclose = () => {
+        setStatus('WebSocket disconnected');
+        stopAudioStream();
+      };
+
+      websocketRef.current.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setStatus('WebSocket error');
+      };
+
+    } catch (error) {
+      setStatus('Error accessing microphone');
+      console.error(error);
+    }
+  };
+
+  const stopAudioStream = () => {
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    if (websocketRef.current) {
+      websocketRef.current.close();
+      websocketRef.current = null;
+    }
+
+    setIsRecording(false);
+    setStatus('Recording stopped');
+  };
+
+  useEffect(() => {
+    return () => {
+      stopAudioStream();
+    };
+  }, []);
+
+  const checkBackendHealth = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/health');
+      const data = await response.json();
+      setStatus(data.status);
+    } catch (error) {
+      setStatus('Backend not responding');
+      console.error(error);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-white">
       {/* Left Sidebar */}
@@ -160,17 +285,29 @@ export default function Home() {
 
         {/* Chat Area with Video Placeholder */}
         <div className="flex-1 flex items-center justify-center p-4">
-  <div className="w-full max-w-3xl aspect-video  rounded-lg  flex items-center justify-center">
-    <div className="w-full aspect-video  rounded-lg  flex items-center justify-center overflow-hidden">
-      <video className="w-full h-full object-contain" autoPlay loop muted playsInline>
-        <source src="/video.mp4" type="video/mp4" />
-        Your browser does not support the video tag.
-      </video>
-    </div>
-  </div>
-</div>
-
-
+          <div className="w-full max-w-3xl aspect-video rounded-lg flex flex-col items-center justify-center">
+            <div className="w-full aspect-video rounded-lg flex items-center justify-center overflow-hidden relative">
+              <video className="w-full h-full object-contain" autoPlay loop muted playsInline>
+                <source src="/video.mp4" type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
+                <Button
+                  onClick={isRecording ? stopAudioStream : startAudioStream}
+                  className={`px-4 py-2 rounded-lg ${
+                    isRecording 
+                      ? 'bg-red-500 hover:bg-red-600' 
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  } text-white font-semibold flex items-center gap-2`}
+                >
+                  <Mic className="h-4 w-4" />
+                  {isRecording ? 'Stop Recording' : 'Start Recording'}
+                </Button>
+                <div className="text-sm text-white mt-2">{status}</div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Message Input */}
         <div className="border-t p-4">
@@ -263,82 +400,80 @@ export default function Home() {
           </div>
 
           <div className="w-full mt-4 space-y-2">
-  <div className="border rounded-md p-3 bg-green-50 flex items-center gap-2">
-    <CheckCircle className="h-5 w-5 text-green-500" />
-    <span className="text-sm font-medium text-gray-800">
-      Searched for: <span className="font-bold">spaces and special characters...</span>
-    </span>
-  </div>
-  <div className="border rounded-md p-3 bg-green-50 flex items-center gap-2">
-    <CheckCircle className="h-5 w-5 text-green-500" />
-    <span className="text-sm font-medium text-gray-800">
-      Successfully generated responses
-    </span>
-  </div>
-</div>
-
-
-          <div className="w-full max-w-4xl h-auto min-h-[400px] bg-white shadow-lg border rounded-lg p-6 mt-5"> 
-          <div className="w-full mt-6">
-            <h4 className="text-sm font-medium mb-2">Token usage in language models explains how text is processed</h4>
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <div className="text-sm font-medium">1.</div>
-                <div className="text-sm">
-                  Tokens are the basic units of text that language models process, typically representing parts of words
-                  or punctuation
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <div className="text-sm font-medium">2.</div>
-                <div className="text-sm">
-                  Models count tokens in both input and output, with each token roughly corresponding to 4 characters of
-                  English text
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <div className="text-sm font-medium">3.</div>
-                <div className="text-sm">
-                  Services track tokens by time, timestamps and session IDs to monitor interactions and improve response
-                  relevance
-                </div>
-              </div>
+            <div className="border rounded-md p-3 bg-green-50 flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              <span className="text-sm font-medium text-gray-800">
+                Searched for: <span className="font-bold">spaces and special characters...</span>
+              </span>
             </div>
-            <p className="text-sm mt-4">Token usage affects model performance and cost efficiency</p>
-          </div>
-          
-
-          <div className="w-full mt-6 grid grid-cols-2 gap-2">
-            <div className="flex items-center gap-1 text-xs border rounded-md p-1.5">
-              <div className="h-4 w-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px]">
-                G
-              </div>
-              <span>google.com</span>
-              <ChevronRight className="h-3 w-3 ml-auto" />
-            </div>
-            <div className="flex items-center gap-1 text-xs border rounded-md p-1.5">
-              <div className="h-4 w-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px]">
-                M
-              </div>
-              <span>medium.com</span>
-              <ChevronRight className="h-3 w-3 ml-auto" />
-            </div>
-            <div className="flex items-center gap-1 text-xs border rounded-md p-1.5">
-              <div className="h-4 w-4 rounded-full bg-orange-500 text-white flex items-center justify-center text-[10px]">
-                P
-              </div>
-              <span>production.com</span>
-              <ChevronRight className="h-3 w-3 ml-auto" />
-            </div>
-            <div className="flex items-center gap-1 text-xs border rounded-md p-1.5">
-              <div className="h-4 w-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px]">
-                L
-              </div>
-              <span>linkedin.com</span>
-              <ChevronRight className="h-3 w-3 ml-auto" />
+            <div className="border rounded-md p-3 bg-green-50 flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              <span className="text-sm font-medium text-gray-800">
+                Successfully generated responses
+              </span>
             </div>
           </div>
-          </div>  
+
+          <div className="w-full max-w-4xl h-auto min-h-[400px] bg-white shadow-lg border rounded-lg p-6 mt-5">
+            <div className="w-full mt-6">
+              <h4 className="text-sm font-medium mb-2">Token usage in language models explains how text is processed</h4>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <div className="text-sm font-medium">1.</div>
+                  <div className="text-sm">
+                    Tokens are the basic units of text that language models process, typically representing parts of words
+                    or punctuation
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="text-sm font-medium">2.</div>
+                  <div className="text-sm">
+                    Models count tokens in both input and output, with each token roughly corresponding to 4 characters of
+                    English text
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="text-sm font-medium">3.</div>
+                  <div className="text-sm">
+                    Services track tokens by time, timestamps and session IDs to monitor interactions and improve response
+                    relevance
+                  </div>
+                </div>
+              </div>
+              <p className="text-sm mt-4">Token usage affects model performance and cost efficiency</p>
+            </div>
+
+            <div className="w-full mt-6 grid grid-cols-2 gap-2">
+              <div className="flex items-center gap-1 text-xs border rounded-md p-1.5">
+                <div className="h-4 w-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px]">
+                  G
+                </div>
+                <span>google.com</span>
+                <ChevronRight className="h-3 w-3 ml-auto" />
+              </div>
+              <div className="flex items-center gap-1 text-xs border rounded-md p-1.5">
+                <div className="h-4 w-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px]">
+                  M
+                </div>
+                <span>medium.com</span>
+                <ChevronRight className="h-3 w-3 ml-auto" />
+              </div>
+              <div className="flex items-center gap-1 text-xs border rounded-md p-1.5">
+                <div className="h-4 w-4 rounded-full bg-orange-500 text-white flex items-center justify-center text-[10px]">
+                  P
+                </div>
+                <span>production.com</span>
+                <ChevronRight className="h-3 w-3 ml-auto" />
+              </div>
+              <div className="flex items-center gap-1 text-xs border rounded-md p-1.5">
+                <div className="h-4 w-4 rounded-full bg-blue-700 text-white flex items-center justify-center text-[10px]">
+                  L
+                </div>
+                <span>linkedin.com</span>
+                <ChevronRight className="h-3 w-3 ml-auto" />
+              </div>
+            </div>
+          </div>
 
           <div className="w-full mt-6 border-t pt-4">
             <Button variant="ghost" className="w-full justify-between">
